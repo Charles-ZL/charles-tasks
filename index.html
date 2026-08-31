@@ -782,9 +782,164 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ========== Login ========== */
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  padding: 16px;
+}
+.login-overlay[hidden] { display: none; }
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 36px 30px 30px;
+  text-align: center;
+}
+
+.login-card .login-icon {
+  width: 62px;
+  height: 62px;
+  margin: 0 auto 14px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3);
+}
+
+.login-card h2 {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.login-card .login-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.login-field {
+  text-align: left;
+  margin-bottom: 16px;
+}
+
+.login-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.login-field input {
+  width: 100%;
+  padding: 11px 13px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.login-field input:focus {
+  border-color: var(--primary);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.login-error {
+  display: none;
+  font-size: 13px;
+  color: var(--danger);
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  text-align: left;
+}
+
+.login-error.show { display: block; }
+
+.btn-login {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.btn-login:hover { opacity: 0.92; }
+.btn-login:active { transform: scale(0.985); }
+.btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.login-footer {
+  margin-top: 18px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* 未登录时隐藏应用主体 */
+body:not(.authed) .header,
+body:not(.authed) .container,
+body:not(.authed) .toast { display: none; }
+
+.btn-logout {
+  border: none;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-logout:hover { background: rgba(255,255,255,0.28); }
 </style>
 </head>
 <body>
+
+<!-- Login Overlay -->
+<div class="login-overlay" id="loginOverlay" hidden>
+  <div class="login-card">
+    <div class="login-icon">📋</div>
+    <h2>工作任务管理</h2>
+    <div class="login-sub">请登录后继续使用</div>
+    <form id="loginForm" autocomplete="off">
+      <div class="login-field">
+        <label for="loginUser">用户名</label>
+        <input type="text" id="loginUser" placeholder="请输入用户名" autocomplete="username" required>
+      </div>
+      <div class="login-field">
+        <label for="loginPass">密码</label>
+        <input type="password" id="loginPass" placeholder="请输入密码" autocomplete="current-password" required>
+      </div>
+      <div class="login-error" id="loginError">❌ 用户名或密码错误，请重试</div>
+      <button type="submit" class="btn-login" id="loginBtn">登 录</button>
+    </form>
+    <div class="login-footer">🔒 授权用户访问</div>
+  </div>
+</div>
 
 <!-- Header -->
 <div class="header">
@@ -798,6 +953,7 @@ body {
         <span class="sync-dot"></span><span id="syncText">连接中…</span>
       </div>
       <button class="btn-refresh" id="refreshBtn" onclick="refreshFromServer()" title="从云端刷新">🔄</button>
+      <button class="btn-logout" id="logoutBtn" onclick="handleLogout()" title="退出登录">🚪 退出</button>
     </div>
   </div>
 </div>
@@ -2168,7 +2324,138 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-init();
+// ============================================================
+// 登录验证（静态站点前端门禁）
+// 凭据以 SHA-256 哈希存放，避免源码中出现明文密码
+// 如需修改账号密码：重新计算哈希后替换下面两行即可
+// ============================================================
+const AUTH_USER_HASH = 'c43139196d576427b9073922c4da86ff6d0ecff71d1a2c2ad9116ad2a1e8d50d'; // Charles
+const AUTH_PASS_HASH = '246a543d4564611bab13e6735d2547a47d4686733cc50224abe9ba7c16dcd549'; // Charles#001
+const AUTH_SESSION_KEY = 'work_task_manager_auth';
+
+let appInitialized = false;
+
+async function sha256(text) {
+  if (crypto && crypto.subtle) {
+    try {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) { /* 降级到下方纯 JS 实现 */ }
+  }
+  return sha256Js(text);
+}
+
+// 纯 JS SHA-256 兜底（用于非安全上下文，如 file:// 打开）
+function sha256Js(ascii) {
+  function rightRotate(v, a) { return (v >>> a) | (v << (32 - a)); }
+  const mathPow = Math.pow, maxWord = mathPow(2, 32);
+  let result = '';
+  const words = [], asciiBitLength = ascii.length * 8;
+  let hash = [], k = [], primeCounter = 0;
+  const isComposite = {};
+  for (let candidate = 2; primeCounter < 64; candidate++) {
+    if (!isComposite[candidate]) {
+      for (let i = 0; i < 313; i += candidate) isComposite[i] = candidate;
+      hash[primeCounter] = (mathPow(candidate, 0.5) * maxWord) | 0;
+      k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
+    }
+  }
+  ascii += '\x80';
+  while (ascii.length % 64 - 56) ascii += '\x00';
+  for (let i = 0; i < ascii.length; i++) {
+    const j = ascii.charCodeAt(i);
+    if (j >> 8) return ''; // 非 ASCII，需走 crypto.subtle
+    words[i >> 2] |= j << ((3 - i) % 4) * 8;
+  }
+  words[words.length] = ((asciiBitLength / maxWord) | 0);
+  words[words.length] = (asciiBitLength);
+  for (let j = 0; j < words.length;) {
+    const w = words.slice(j, j += 16);
+    const oldHash = hash;
+    hash = hash.slice(0, 8);
+    for (let i = 0; i < 64; i++) {
+      const w15 = w[i - 15], w2 = w[i - 2];
+      const a = hash[0], e = hash[4];
+      const temp1 = hash[7]
+        + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25))
+        + ((e & hash[5]) ^ ((~e) & hash[6])) + k[i]
+        + (w[i] = (i < 16) ? w[i] : (
+            w[i - 16]
+            + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3))
+            + w[i - 7]
+            + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))
+          ) | 0);
+      const temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22))
+        + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+      hash = [(temp1 + temp2) | 0].concat(hash);
+      hash[4] = (hash[4] + temp1) | 0;
+    }
+    for (let i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;
+  }
+  for (let i = 0; i < 8; i++) {
+    for (let j = 3; j + 1; j--) {
+      const b = (hash[i] >> (j * 8)) & 255;
+      result += ((b < 16) ? 0 : '') + b.toString(16);
+    }
+  }
+  return result;
+}
+
+function showLogin() {
+  document.getElementById('loginOverlay').hidden = false;
+  document.body.classList.remove('authed');
+  setTimeout(() => document.getElementById('loginUser').focus(), 50);
+}
+
+async function enterApp() {
+  document.getElementById('loginOverlay').hidden = true;
+  document.body.classList.add('authed');
+  if (!appInitialized) {
+    appInitialized = true;
+    init();
+  }
+}
+
+function handleLogout() {
+  sessionStorage.removeItem(AUTH_SESSION_KEY);
+  location.reload();
+}
+
+document.getElementById('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  const errBox = document.getElementById('loginError');
+  const user = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  btn.disabled = true;
+  btn.textContent = '验证中…';
+  try {
+    const [uHash, pHash] = await Promise.all([sha256(user), sha256(pass)]);
+    if (uHash === AUTH_USER_HASH && pHash === AUTH_PASS_HASH) {
+      sessionStorage.setItem(AUTH_SESSION_KEY, '1');
+      errBox.classList.remove('show');
+      document.getElementById('loginPass').value = '';
+      enterApp();
+    } else {
+      errBox.classList.add('show');
+      document.getElementById('loginPass').value = '';
+      document.getElementById('loginPass').focus();
+    }
+  } catch (err) {
+    errBox.textContent = '⚠️ 验证失败，请稍后重试';
+    errBox.classList.add('show');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '登 录';
+  }
+});
+
+// 页面加载：已在本会话登录过则直接进入，否则显示登录页
+if (sessionStorage.getItem(AUTH_SESSION_KEY) === '1') {
+  enterApp();
+} else {
+  showLogin();
+}
 </script>
 </body>
 </html>
