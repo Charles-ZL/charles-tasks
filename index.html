@@ -2183,16 +2183,21 @@ function effectiveTaskOwners(t) {
 function populateFilterOwners() {
   const select = document.getElementById('filterOwner');
   const current = select.value;
+  const memberFilter = document.getElementById('filterMember').value;
   const names = [];
-  state.members.forEach(m => (m.owners || []).forEach(o => {
+  const addOwners = (list) => (list || []).forEach(o => {
     const n = String(o || '').trim();
     if (n && !names.includes(n)) names.push(n);
-  }));
-  // 也收集未挂靠任何国家的任务负责人，避免遗漏
-  state.tasks.forEach(t => (t.owners || []).forEach(o => {
-    const n = String(o || '').trim();
-    if (n && !names.includes(n)) names.push(n);
-  }));
+  });
+  if (memberFilter) {
+    // 已选国家：只显示该国家的负责人（effectiveTaskOwners 的结果必然属于该国）
+    const member = state.members.find(m => m.id === memberFilter);
+    addOwners(member && member.owners);
+  } else {
+    state.members.forEach(m => addOwners(m.owners));
+    // 也收集未挂靠任何国家的任务负责人，避免遗漏
+    state.tasks.forEach(t => addOwners(t.owners));
+  }
   names.sort((a, b) => a.localeCompare(b, 'zh-CN'));
   select.innerHTML = '<option value="">全部</option>' +
     names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
