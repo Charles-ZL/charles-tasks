@@ -1012,6 +1012,12 @@ body:not(.authed) .toast { display: none; }
           </select>
         </div>
         <div class="filter-group">
+          <label>负责人：</label>
+          <select id="filterOwner" onchange="renderTaskTable()">
+            <option value="">全部</option>
+          </select>
+        </div>
+        <div class="filter-group">
           <label>优先级：</label>
           <select id="filterPriority" onchange="renderTaskTable()">
             <option value="">全部</option>
@@ -1508,6 +1514,7 @@ function escapeHtml(str) {
 
 function renderAll() {
   populateFilterMembers();
+  populateFilterOwners();
   updateBadges();
   renderDashboard();
   renderTaskTable();
@@ -1612,12 +1619,14 @@ function renderTaskTable() {
   const wrap = document.getElementById('taskTableWrap');
   const statusFilter = document.getElementById('filterStatus').value;
   const memberFilter = document.getElementById('filterMember').value;
+  const ownerFilter = document.getElementById('filterOwner').value;
   const priorityFilter = document.getElementById('filterPriority').value;
   const search = document.getElementById('searchInput').value.toLowerCase().trim();
 
   let tasks = [...state.tasks];
   if (statusFilter) tasks = tasks.filter(t => t.status === statusFilter);
   if (memberFilter) tasks = tasks.filter(t => t.memberId == memberFilter);
+  if (ownerFilter) tasks = tasks.filter(t => effectiveTaskOwners(t).includes(ownerFilter));
   if (priorityFilter) tasks = tasks.filter(t => t.priority === priorityFilter);
   if (search) tasks = tasks.filter(t => t.title.toLowerCase().includes(search));
 
@@ -2159,6 +2168,34 @@ function populateFilterMembers() {
   select.innerHTML = '<option value="">全部</option>' +
     state.members.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
   select.value = current;
+}
+
+// 任务的"有效负责人"：任务指定的负责人（取与所属国家交集）优先，
+// 未指定时回落到该国全部负责人（与列表中国家单元格的展示逻辑一致）
+function effectiveTaskOwners(t) {
+  const member = state.members.find(m => m.id === t.memberId);
+  const memberOwners = (member && member.owners) || [];
+  const assigned = (t.owners || []).filter(o => memberOwners.includes(o));
+  return assigned.length > 0 ? assigned : memberOwners;
+}
+
+function populateFilterOwners() {
+  const select = document.getElementById('filterOwner');
+  const current = select.value;
+  const names = [];
+  state.members.forEach(m => (m.owners || []).forEach(o => {
+    const n = String(o || '').trim();
+    if (n && !names.includes(n)) names.push(n);
+  }));
+  // 也收集未挂靠任何国家的任务负责人，避免遗漏
+  state.tasks.forEach(t => (t.owners || []).forEach(o => {
+    const n = String(o || '').trim();
+    if (n && !names.includes(n)) names.push(n);
+  }));
+  names.sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  select.innerHTML = '<option value="">全部</option>' +
+    names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  select.value = current; // 当前选中项若已不存在则自动回到"全部"
 }
 
 function updateBadges() {
