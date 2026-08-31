@@ -2191,7 +2191,8 @@ function populateFilterOwners() {
   });
   if (memberFilter) {
     // 已选国家：只显示该国家的负责人（effectiveTaskOwners 的结果必然属于该国）
-    const member = state.members.find(m => m.id === memberFilter);
+    // 注意：filterMember.value 是字符串，m.id 在历史数据里是数字，必须用宽松相等
+    const member = state.members.find(m => m.id == memberFilter);
     addOwners(member && member.owners);
   } else {
     state.members.forEach(m => addOwners(m.owners));
