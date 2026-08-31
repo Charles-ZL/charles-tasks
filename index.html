@@ -1616,6 +1616,7 @@ function renderFollowUpTable(tasks) {
 }
 
 function renderTaskTable() {
+  populateFilterOwners(); // 首屏/切到任务页不走 renderAll，这里确保筛选项已生成
   const wrap = document.getElementById('taskTableWrap');
   const statusFilter = document.getElementById('filterStatus').value;
   const memberFilter = document.getElementById('filterMember').value;
